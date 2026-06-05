@@ -271,7 +271,6 @@ dependencies = [
  "entangled-core",
  "entangled-engine",
  "ratatui",
- "serde_json",
 ]
 
 [[package]]
