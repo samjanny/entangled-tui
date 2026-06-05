@@ -1,5 +1,9 @@
 # entangled-tui
 
+[![CI](https://github.com/samjanny/entangled-tui/actions/workflows/ci.yml/badge.svg)](https://github.com/samjanny/entangled-tui/actions/workflows/ci.yml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88-orange.svg)](#building-and-testing)
+
 A terminal content viewer for the Entangled v1.0 protocol. It renders a
 **verified** document's scene IR (from [`entangled-engine`](https://github.com/samjanny/entangled-engine))
 in a scrollable terminal view.
