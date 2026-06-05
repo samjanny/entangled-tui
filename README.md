@@ -43,17 +43,29 @@ for inspecting the rendered content of a document one already trusts.
   I/O.
 - `app` (library): viewer state (lines + scroll viewport). Pure arithmetic, no
   I/O.
-- the `entangled-tui` binary: the thin crossterm/ratatui event-loop and draw
-  shell over the two.
+- `viewer` (library): the crossterm/ratatui event-loop and draw shell over the
+  two (`viewer::run`); the only part that touches the terminal.
+- the `entangled-tui` binary: CLI glue that loads a document and hands the scene
+  to `viewer::run`.
 
-## Usage
+## Try it
+
+The quickest way to see the viewer is the bundled demo, which builds a rich
+scene in memory and opens it - no document file needed:
+
+```sh
+cargo run --example demo
+```
+
+To view a real document, pass a content-document JSON to the binary:
 
 ```sh
 entangled-tui <content-document.json>
 ```
 
 Keys: `j`/`k` or arrows to scroll, `space`/`PageDown` and `PageUp` to page,
-`g`/`G` (or `Home`/`End`) to jump, `q`/`Esc` to quit.
+`g`/`G` (or `Home`/`End`) to jump, `q`/`Esc` to quit. Resize the terminal to
+watch the content re-wrap.
 
 ## Building and testing
 
@@ -65,7 +77,8 @@ cargo fmt --check
 ```
 
 The pure layout and viewport logic is covered by golden tests; the terminal
-shell is thin glue and is exercised by running the binary.
+shell is thin glue and is exercised by running the binary or `cargo run
+--example demo`.
 
 ## License
 

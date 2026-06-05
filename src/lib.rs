@@ -24,14 +24,17 @@
 //!
 //! - [`layout`]: pure `Scene` -> width-wrapped display lines. Testable, no I/O.
 //! - [`app`]: viewer state (lines + scroll viewport). Pure, no I/O.
-//! - the `entangled-tui` binary (`main.rs`): the thin crossterm/ratatui
-//!   event-loop and draw shell over the two.
+//! - [`viewer`]: the crossterm/ratatui event-loop and draw shell over the two
+//!   ([`viewer::run`]). The one part that touches the terminal.
+//! - the `entangled-tui` binary (`main.rs`): CLI glue that loads a document and
+//!   hands the scene to [`viewer::run`].
 
 #![forbid(unsafe_code)]
 #![deny(rust_2018_idioms)]
 
 pub mod app;
 pub mod layout;
+pub mod viewer;
 
 pub use app::App;
 pub use layout::lay_out;
