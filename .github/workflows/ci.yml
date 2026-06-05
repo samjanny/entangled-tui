@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+# entangled-tui has two path dependencies: entangled-core (in the entangled-api
+# repo) and entangled-engine. CI lays out all three repositories as siblings so
+# ../entangled-api/entangled-core and ../entangled-engine resolve: this repo is
+# checked out under entangled-tui/, with entangled-api/ and entangled-engine/
+# alongside it.
+jobs:
+  test:
+    name: Test ${{ matrix.os }} / ${{ matrix.rust }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable]
+        include:
+          - os: ubuntu-latest
+            rust: beta
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: entangled-tui
+      - name: Checkout entangled-api (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: samjanny/entangled-api
+          path: entangled-api
+      - name: Checkout entangled-engine (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: samjanny/entangled-engine
+          path: entangled-engine
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: entangled-tui
+      - name: Build
+        working-directory: entangled-tui
+        run: cargo build --all-targets --locked
+      - name: Test
+        working-directory: entangled-tui
+        run: cargo test --all-targets --locked
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: entangled-tui
+      - name: Checkout entangled-api (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: samjanny/entangled-api
+          path: entangled-api
+      - name: Checkout entangled-engine (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: samjanny/entangled-engine
+          path: entangled-engine
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: entangled-tui
+      - name: Clippy
+        working-directory: entangled-tui
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+  doc:
+    name: Doc build
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: entangled-tui
+      - name: Checkout entangled-api (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: samjanny/entangled-api
+          path: entangled-api
+      - name: Checkout entangled-engine (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: samjanny/entangled-engine
+          path: entangled-engine
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: entangled-tui
+      - name: Doc
+        working-directory: entangled-tui
+        run: cargo doc --no-deps --locked
+
+  msrv:
+    name: MSRV (1.88)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: entangled-tui
+      - name: Checkout entangled-api (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: samjanny/entangled-api
+          path: entangled-api
+      - name: Checkout entangled-engine (path dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: samjanny/entangled-engine
+          path: entangled-engine
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: msrv
+          workspaces: entangled-tui
+      - name: Build
+        working-directory: entangled-tui
+        run: cargo build --all-targets --locked
