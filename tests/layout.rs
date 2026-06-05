@@ -181,3 +181,79 @@ fn scroll_clamps_at_bottom_and_top() {
     app.to_top();
     assert_eq!(app.scroll(), 0);
 }
+
+// --- continuation prefixes on wrapped lines ---
+
+#[test]
+fn wrapped_quote_keeps_marker() {
+    let scene = Scene {
+        nodes: vec![SceneNode::Quote {
+            runs: vec![plain(
+                "trust the publisher key not the carrier address ever",
+            )],
+            attribution: None,
+        }],
+    };
+    assert_eq!(
+        lay_out(&scene, 24),
+        vec![
+            "> trust the publisher".to_owned(),
+            "> key not the carrier".to_owned(),
+            "> address ever".to_owned(),
+            String::new(),
+        ]
+    );
+}
+
+#[test]
+fn wrapped_list_item_aligns_under_text() {
+    let scene = Scene {
+        nodes: vec![SceneNode::List {
+            ordered: true,
+            items: vec![vec![plain(
+                "a fairly long list item that must wrap somewhere",
+            )]],
+        }],
+    };
+    // Continuation rows are indented to the width of "1. " (three columns).
+    assert_eq!(
+        lay_out(&scene, 20),
+        vec![
+            "1. a fairly long".to_owned(),
+            "   list item that".to_owned(),
+            "   must wrap".to_owned(),
+            "   somewhere".to_owned(),
+            String::new(),
+        ]
+    );
+}
+
+#[test]
+fn wrapped_form_field_keeps_indent() {
+    use entangled_engine::FormFieldView;
+    let scene = Scene {
+        nodes: vec![SceneNode::SubmitForm {
+            label: vec![plain("F")],
+            submit_to: entangled_core::types::EntangledPath::try_from("/s").unwrap(),
+            fields: vec![FormFieldView::Text {
+                name: Slug::try_from("n").unwrap(),
+                label: "a very long field label that wraps".to_owned(),
+                required: true,
+                max_length: 10,
+            }],
+            submit_label: "Go".to_owned(),
+        }],
+    };
+    assert_eq!(
+        lay_out(&scene, 22),
+        vec![
+            "F (form -> /s)".to_owned(),
+            "[text] n = \"a very".to_owned(),
+            "  long field label".to_owned(),
+            "  that wraps\"".to_owned(),
+            "  (required)".to_owned(),
+            "[Go]".to_owned(),
+            String::new(),
+        ]
+    );
+}
