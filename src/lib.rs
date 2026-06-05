@@ -37,7 +37,7 @@ pub mod layout;
 pub mod viewer;
 
 pub use app::App;
-pub use layout::lay_out;
+pub use layout::{lay_out, Role, SpanStyle, StyledLine, StyledSpan};
 
 /// The static chrome label shown by the viewer (see the crate docs): it states
 /// plainly that this is a content viewer, not a conforming client.

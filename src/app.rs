@@ -6,11 +6,12 @@
 
 use entangled_engine::Scene;
 
-use crate::layout::lay_out;
+use crate::layout::{lay_out, StyledLine};
 
-/// The viewer's content state: the wrapped lines and the current scroll offset.
+/// The viewer's content state: the wrapped styled lines and the current scroll
+/// offset.
 pub struct App {
-    lines: Vec<String>,
+    lines: Vec<StyledLine>,
     /// Index of the first visible line.
     scroll: usize,
     /// The width the lines were laid out for, so a resize can re-wrap.
@@ -49,7 +50,7 @@ impl App {
 
     /// The lines visible in a viewport of `height` rows, starting at the
     /// current scroll offset.
-    pub fn visible(&self, height: usize) -> &[String] {
+    pub fn visible(&self, height: usize) -> &[StyledLine] {
         let start = self.scroll.min(self.lines.len());
         let end = start.saturating_add(height).min(self.lines.len());
         &self.lines[start..end]

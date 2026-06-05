@@ -31,16 +31,28 @@ client - rather than a trust/canary indicator it has no basis to assert. A false
 "verified" badge would be worse than none. When the trust-state layer exists,
 this viewer can grow a real chrome; until then it does not pretend.
 
-It also does not verify signatures: it deserializes a content document (which
-re-applies the core type invariants) and renders it. Signature and trust
-verification belong to a real client built on `entangled-core`; this viewer is
-for inspecting the rendered content of a document one already trusts.
+It also does not verify signatures: it runs the core's schema validation
+(re-applying every protocol invariant) and renders the result. Signature and
+trust verification belong to a real client built on `entangled-core`; this
+viewer is for inspecting the rendered content of a document one already trusts.
+
+## Rendering
+
+The viewer applies real terminal styling, not a markup dialect: inline marks
+(bold/italic/strikethrough, and inline code) render as terminal attributes and
+colors with no delimiter characters, and headings, quotes, links, and code are
+distinguished by color. A few structural markers are kept as text because the
+terminal has no styling that conveys them: the `> ` quote prefix, list bullets,
+`[image: alt]`, and the `(-> target)` / `(form -> path)` annotations. The pure
+layout layer (`layout`) carries this as toolkit-neutral styled spans; the viewer
+maps them to colors, so the layout stays testable as data.
 
 ## Structure
 
-- `layout` (library): pure `Scene` -> width-wrapped display lines. Prose is
-  word-wrapped; code blocks are verbatim with an adaptive fence. Testable, no
-  I/O.
+- `layout` (library): pure `Scene` -> width-wrapped, toolkit-neutral styled
+  lines (`StyledLine`/`StyledSpan` carrying inline attributes and a semantic
+  `Role`). Prose is word-wrapped; code blocks are verbatim with an adaptive
+  fence. Color-free and testable, no I/O.
 - `app` (library): viewer state (lines + scroll viewport). Pure arithmetic, no
   I/O.
 - `viewer` (library): the crossterm/ratatui event-loop and draw shell over the

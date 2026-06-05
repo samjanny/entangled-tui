@@ -20,7 +20,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Frame, Terminal};
 
-use crate::{App, CHROME_LABEL};
+use crate::{App, Role, SpanStyle, StyledLine, CHROME_LABEL};
 
 /// Run the interactive viewer on `scene` until the user quits.
 ///
@@ -108,13 +108,10 @@ fn draw(f: &mut Frame<'_>, app: &App) {
     )));
     f.render_widget(chrome, chunks[0]);
 
-    // Content: the visible slice of laid-out lines inside a border.
+    // Content: the visible slice of laid-out lines inside a border, each styled
+    // line converted to a ratatui Line of styled spans.
     let inner_height = chunks[1].height.saturating_sub(2) as usize;
-    let visible: Vec<Line<'_>> = app
-        .visible(inner_height)
-        .iter()
-        .map(|l| Line::from(l.clone()))
-        .collect();
+    let visible: Vec<Line<'_>> = app.visible(inner_height).iter().map(styled_line).collect();
     let content =
         Paragraph::new(visible).block(Block::default().borders(Borders::ALL).title("content"));
     f.render_widget(content, chunks[1]);
@@ -127,4 +124,46 @@ fn draw(f: &mut Frame<'_>, app: &App) {
     )))
     .style(Style::default().fg(Color::DarkGray));
     f.render_widget(status, chunks[2]);
+}
+
+/// Convert a layout [`StyledLine`] into a ratatui [`Line`] of styled spans.
+fn styled_line(line: &StyledLine) -> Line<'static> {
+    Line::from(
+        line.iter()
+            .map(|s| Span::styled(s.text.clone(), span_style(s.style)))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Map a layout [`SpanStyle`] to a ratatui [`Style`]: inline attributes become
+/// modifiers, and the semantic role chooses the color. Colors live here (the
+/// viewer is the toolkit layer); the layout module is color-free.
+fn span_style(style: SpanStyle) -> Style {
+    let mut s = match style.role {
+        Role::Plain => Style::default(),
+        Role::Heading => Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+        Role::Quote => Style::default().fg(Color::Gray),
+        Role::Link => Style::default()
+            .fg(Color::Blue)
+            .add_modifier(Modifier::UNDERLINED),
+        Role::CodeBlock => Style::default().fg(Color::Green),
+        Role::Marker => Style::default().fg(Color::DarkGray),
+    };
+    if style.bold {
+        s = s.add_modifier(Modifier::BOLD);
+    }
+    if style.italic {
+        s = s.add_modifier(Modifier::ITALIC);
+    }
+    if style.strikethrough {
+        s = s.add_modifier(Modifier::CROSSED_OUT);
+    }
+    if style.code {
+        // No monospace toggle in a terminal (it is already monospace); use a
+        // subtle color shift so inline code is distinguishable.
+        s = s.fg(Color::Green);
+    }
+    s
 }

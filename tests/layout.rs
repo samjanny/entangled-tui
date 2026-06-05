@@ -1,12 +1,38 @@
 //! Golden tests for the pure layout and viewport logic.
 //!
 //! Scenes are built directly from the public engine IR types, laid out at a
-//! fixed width, and asserted line by line. The viewport tests exercise scroll
-//! arithmetic. No terminal is involved.
+//! fixed width, and asserted as styled rows. Inline marks are carried as span
+//! attributes (no delimiter characters); block roles are carried as a `Role`.
+//! The viewport tests exercise scroll arithmetic. No terminal is involved.
 
 use entangled_core::types::Slug;
-use entangled_engine::{InlineRun, LinkRef, Scene, SceneNode, TextStyle};
-use entangled_tui::{lay_out, App};
+use entangled_engine::{FormFieldView, InlineRun, LinkRef, Scene, SceneNode, TextStyle};
+use entangled_tui::{lay_out, App, Role, SpanStyle, StyledLine, StyledSpan};
+
+// --- construction helpers for the expected styled rows ---
+
+/// A span with the given text and role, no inline attributes.
+fn sp(text: &str, role: Role) -> StyledSpan {
+    StyledSpan {
+        text: text.to_owned(),
+        style: SpanStyle {
+            role,
+            ..SpanStyle::default()
+        },
+    }
+}
+
+/// A bold span with the given text and role.
+fn sp_bold(text: &str, role: Role) -> StyledSpan {
+    StyledSpan {
+        text: text.to_owned(),
+        style: SpanStyle {
+            role,
+            bold: true,
+            ..SpanStyle::default()
+        },
+    }
+}
 
 fn plain(t: &str) -> InlineRun {
     InlineRun::Text {
@@ -21,20 +47,24 @@ fn para(t: &str) -> SceneNode {
     }
 }
 
+/// An empty (blank separator) row.
+fn nil() -> StyledLine {
+    Vec::new()
+}
+
 #[test]
 fn paragraph_wraps_to_width() {
     let scene = Scene {
         nodes: vec![para("one two three four five")],
     };
-    // Width 9 columns: greedy word wrap.
-    let lines = lay_out(&scene, 9);
+    // Width 9 columns: greedy word wrap, all Plain.
     assert_eq!(
-        lines,
+        lay_out(&scene, 9),
         vec![
-            "one two".to_owned(), // 7 <= 9; "+three" would be 13
-            "three".to_owned(),   // 5; "+four" would be 10 > 9
-            "four five".to_owned(),
-            String::new(), // block separator
+            vec![sp("one two", Role::Plain)],
+            vec![sp("three", Role::Plain)],
+            vec![sp("four five", Role::Plain)],
+            nil(),
         ]
     );
 }
@@ -44,20 +74,19 @@ fn overlong_word_is_hard_broken() {
     let scene = Scene {
         nodes: vec![para("abcdefghijkl")], // 12 chars, width 5
     };
-    let lines = lay_out(&scene, 5);
     assert_eq!(
-        lines,
+        lay_out(&scene, 5),
         vec![
-            "abcde".to_owned(),
-            "fghij".to_owned(),
-            "kl".to_owned(),
-            String::new(),
+            vec![sp("abcde", Role::Plain)],
+            vec![sp("fghij", Role::Plain)],
+            vec![sp("kl", Role::Plain)],
+            nil(),
         ]
     );
 }
 
 #[test]
-fn heading_and_marks_and_link_layout() {
+fn heading_marker_and_inline_bold_carry_as_style() {
     let scene = Scene {
         nodes: vec![
             SceneNode::Heading {
@@ -84,16 +113,41 @@ fn heading_and_marks_and_link_layout() {
             },
         ],
     };
-    let lines = lay_out(&scene, 80);
+    // The `## ` prefix is a Marker; the heading text is Role::Heading. The bold
+    // run keeps its text exactly (no `*`), carrying bold as an attribute.
     assert_eq!(
-        lines,
+        lay_out(&scene, 80),
         vec![
-            "## Title".to_owned(),
-            String::new(),
-            "*hi* see (-> /x)".to_owned(),
-            String::new(),
+            vec![sp("## ", Role::Marker), sp("Title", Role::Heading)],
+            nil(),
+            vec![sp_bold("hi", Role::Plain), sp(" see (-> /x)", Role::Link)],
+            nil(),
         ]
     );
+}
+
+#[test]
+fn inline_marks_emit_no_delimiter_characters() {
+    // A run with every mark set must keep its text verbatim and carry the marks
+    // as attributes - the old renderer would have wrapped it in `*/`~...~`/*`.
+    let scene = Scene {
+        nodes: vec![SceneNode::Paragraph {
+            runs: vec![InlineRun::Text {
+                text: "styled".to_owned(),
+                style: TextStyle {
+                    bold: true,
+                    italic: true,
+                    code: true,
+                    strikethrough: true,
+                },
+            }],
+        }],
+    };
+    let rows = lay_out(&scene, 80);
+    assert_eq!(rows[0].len(), 1);
+    let span = &rows[0][0];
+    assert_eq!(span.text, "styled");
+    assert!(span.style.bold && span.style.italic && span.style.code && span.style.strikethrough);
 }
 
 #[test]
@@ -101,18 +155,19 @@ fn code_block_is_verbatim_and_not_wrapped() {
     let scene = Scene {
         nodes: vec![SceneNode::CodeBlock {
             language: Slug::try_from("text").unwrap(),
-            // A long line that would wrap as prose stays intact as code.
             text: "a very long line of code that exceeds the narrow width".to_owned(),
         }],
     };
-    let lines = lay_out(&scene, 10);
     assert_eq!(
-        lines,
+        lay_out(&scene, 10),
         vec![
-            "```text".to_owned(),
-            "a very long line of code that exceeds the narrow width".to_owned(),
-            "```".to_owned(),
-            String::new(),
+            vec![sp("```text", Role::CodeBlock)],
+            vec![sp(
+                "a very long line of code that exceeds the narrow width",
+                Role::CodeBlock
+            )],
+            vec![sp("```", Role::CodeBlock)],
+            nil(),
         ]
     );
 }
@@ -125,61 +180,18 @@ fn hostile_code_fence_does_not_break_out() {
             text: "x\n```\nforged".to_owned(),
         }],
     };
-    let lines = lay_out(&scene, 80);
+    // Four-backtick fence (longer than the embedded run of three).
     assert_eq!(
-        lines,
+        lay_out(&scene, 80),
         vec![
-            "````text".to_owned(), // four backticks: longer than the embedded run
-            "x".to_owned(),
-            "```".to_owned(),
-            "forged".to_owned(),
-            "````".to_owned(),
-            String::new(),
+            vec![sp("````text", Role::CodeBlock)],
+            vec![sp("x", Role::CodeBlock)],
+            vec![sp("```", Role::CodeBlock)],
+            vec![sp("forged", Role::CodeBlock)],
+            vec![sp("````", Role::CodeBlock)],
+            nil(),
         ]
     );
-}
-
-// --- viewport / scroll ---
-
-fn many_lines_scene(n: usize) -> Scene {
-    Scene {
-        nodes: (0..n).map(|i| para(&format!("line{i}"))).collect(),
-    }
-}
-
-#[test]
-fn visible_slice_follows_scroll() {
-    // Each paragraph is "lineN" + a blank separator => 2 lines per node.
-    let scene = many_lines_scene(5); // 10 laid-out lines
-    let mut app = App::new(&scene, 80);
-    assert_eq!(app.line_count(), 10);
-
-    // Top of a 4-row viewport.
-    assert_eq!(app.visible(4), &["line0", "", "line1", ""]);
-
-    app.scroll_down(2, 4);
-    assert_eq!(app.scroll(), 2);
-    assert_eq!(app.visible(4), &["line1", "", "line2", ""]);
-}
-
-#[test]
-fn scroll_clamps_at_bottom_and_top() {
-    let scene = many_lines_scene(5); // 10 lines
-    let mut app = App::new(&scene, 80);
-
-    // Scrolling far down clamps to max_scroll = 10 - 4 = 6.
-    app.scroll_down(1000, 4);
-    assert_eq!(app.scroll(), 6);
-
-    // Scrolling up past the top clamps to 0.
-    app.scroll_up(1000);
-    assert_eq!(app.scroll(), 0);
-
-    // to_bottom jumps to the last full screen.
-    app.to_bottom(4);
-    assert_eq!(app.scroll(), 6);
-    app.to_top();
-    assert_eq!(app.scroll(), 0);
 }
 
 // --- continuation prefixes on wrapped lines ---
@@ -197,10 +209,16 @@ fn wrapped_quote_keeps_marker() {
     assert_eq!(
         lay_out(&scene, 24),
         vec![
-            "> trust the publisher".to_owned(),
-            "> key not the carrier".to_owned(),
-            "> address ever".to_owned(),
-            String::new(),
+            vec![
+                sp("> ", Role::Quote),
+                sp("trust the publisher", Role::Quote)
+            ],
+            vec![
+                sp("> ", Role::Quote),
+                sp("key not the carrier", Role::Quote)
+            ],
+            vec![sp("> ", Role::Quote), sp("address ever", Role::Quote)],
+            nil(),
         ]
     );
 }
@@ -215,22 +233,21 @@ fn wrapped_list_item_aligns_under_text() {
             )]],
         }],
     };
-    // Continuation rows are indented to the width of "1. " (three columns).
+    // The bullet is a Marker; continuation rows indent to its width (3 cols).
     assert_eq!(
         lay_out(&scene, 20),
         vec![
-            "1. a fairly long".to_owned(),
-            "   list item that".to_owned(),
-            "   must wrap".to_owned(),
-            "   somewhere".to_owned(),
-            String::new(),
+            vec![sp("1. ", Role::Marker), sp("a fairly long", Role::Plain)],
+            vec![sp("   ", Role::Marker), sp("list item that", Role::Plain)],
+            vec![sp("   ", Role::Marker), sp("must wrap", Role::Plain)],
+            vec![sp("   ", Role::Marker), sp("somewhere", Role::Plain)],
+            nil(),
         ]
     );
 }
 
 #[test]
 fn wrapped_form_field_keeps_indent() {
-    use entangled_engine::FormFieldView;
     let scene = Scene {
         nodes: vec![SceneNode::SubmitForm {
             label: vec![plain("F")],
@@ -247,13 +264,60 @@ fn wrapped_form_field_keeps_indent() {
     assert_eq!(
         lay_out(&scene, 22),
         vec![
-            "F (form -> /s)".to_owned(),
-            "[text] n = \"a very".to_owned(),
-            "  long field label".to_owned(),
-            "  that wraps\"".to_owned(),
-            "  (required)".to_owned(),
-            "[Go]".to_owned(),
-            String::new(),
+            vec![sp("F", Role::Plain), sp(" (form -> /s)", Role::Marker)],
+            vec![
+                sp("  ", Role::Marker),
+                sp("[text] n = \"a very", Role::Marker)
+            ],
+            vec![sp("  ", Role::Marker), sp("long field label", Role::Marker)],
+            vec![sp("  ", Role::Marker), sp("that wraps\"", Role::Marker)],
+            vec![sp("  ", Role::Marker), sp("(required)", Role::Marker)],
+            vec![sp("[Go]", Role::Marker)],
+            nil(),
         ]
     );
+}
+
+// --- viewport / scroll ---
+
+fn many_lines_scene(n: usize) -> Scene {
+    Scene {
+        nodes: (0..n).map(|i| para(&format!("line{i}"))).collect(),
+    }
+}
+
+#[test]
+fn visible_slice_follows_scroll() {
+    // Each paragraph is one row + a blank separator => 2 rows per node.
+    let scene = many_lines_scene(5); // 10 laid-out rows
+    let mut app = App::new(&scene, 80);
+    assert_eq!(app.line_count(), 10);
+
+    // Top of a 4-row viewport: line0, blank, line1, blank.
+    let top = app.visible(4);
+    assert_eq!(top.len(), 4);
+    assert_eq!(top[0], vec![sp("line0", Role::Plain)]);
+    assert_eq!(top[1], nil());
+    assert_eq!(top[2], vec![sp("line1", Role::Plain)]);
+
+    app.scroll_down(2, 4);
+    assert_eq!(app.scroll(), 2);
+    assert_eq!(app.visible(4)[0], vec![sp("line1", Role::Plain)]);
+}
+
+#[test]
+fn scroll_clamps_at_bottom_and_top() {
+    let scene = many_lines_scene(5); // 10 rows
+    let mut app = App::new(&scene, 80);
+
+    app.scroll_down(1000, 4);
+    assert_eq!(app.scroll(), 6); // max_scroll = 10 - 4
+
+    app.scroll_up(1000);
+    assert_eq!(app.scroll(), 0);
+
+    app.to_bottom(4);
+    assert_eq!(app.scroll(), 6);
+    app.to_top();
+    assert_eq!(app.scroll(), 0);
 }
