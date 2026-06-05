@@ -194,6 +194,39 @@ fn hostile_code_fence_does_not_break_out() {
     );
 }
 
+#[test]
+fn citation_and_carrier_urls_are_defanged() {
+    // The viewer must not present a clickable clearnet/carrier URL (a terminal
+    // would auto-linkify it into a one-click navigation, which section 03
+    // forbids). The scheme is defanged so the emulator does not linkify it.
+    let citation = Scene {
+        nodes: vec![SceneNode::Link {
+            label: vec![plain("ref")],
+            link: LinkRef::Citation {
+                url: "https://example.org/x".to_owned(),
+            },
+        }],
+    };
+    let row = &lay_out(&citation, 80)[0];
+    let rendered: String = row.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(rendered, "ref (-> hxxps://example.org/x)");
+    assert!(!rendered.contains("https://"));
+
+    let carrier = Scene {
+        nodes: vec![SceneNode::Link {
+            label: vec![plain("svc")],
+            link: LinkRef::Carrier {
+                carrier: entangled_core::types::Carrier::TorV3,
+                url: "http://example.onion/y".to_owned(),
+            },
+        }],
+    };
+    let row = &lay_out(&carrier, 80)[0];
+    let rendered: String = row.iter().map(|s| s.text.as_str()).collect();
+    assert_eq!(rendered, "svc (-> hxxp://example.onion/y)");
+    assert!(!rendered.contains("http://"));
+}
+
 // --- continuation prefixes on wrapped lines ---
 
 #[test]

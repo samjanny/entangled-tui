@@ -47,6 +47,12 @@ terminal has no styling that conveys them: the `> ` quote prefix, list bullets,
 layout layer (`layout`) carries this as toolkit-neutral styled spans; the viewer
 maps them to colors, so the layout stays testable as data.
 
+Citation and carrier link URLs are shown defanged (`https://` -> `hxxps://`):
+section 03 forbids the client from navigating to those clearnet/carrier targets
+automatically, and a terminal that auto-linkifies a raw URL would turn it into a
+one-click navigation. Defanging keeps the URL readable and copyable without the
+emulator treating it as a clickable link.
+
 ## Structure
 
 - `layout` (library): pure `Scene` -> width-wrapped, toolkit-neutral styled

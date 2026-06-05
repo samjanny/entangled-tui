@@ -17,6 +17,10 @@
 //! `- `), `[image: alt]`, and the `(-> target)` / `(form -> path)` link and
 //! form annotations. These are emitted as [`Role::Marker`] spans.
 //!
+//! Citation and carrier link URLs are defanged (`https://` -> `hxxps://`) so a
+//! terminal does not auto-linkify them into one-click navigations: section 03
+//! forbids the client from navigating to those targets automatically.
+//!
 //! Lines are word-wrapped to the viewport width. When a block carries a leading
 //! marker, its wrapped continuation rows keep it aligned: a wrapped quote
 //! repeats `> `, a wrapped list item indents under its bullet, and a wrapped
@@ -386,14 +390,34 @@ fn run_spans(runs: &[InlineRun], role: Role) -> Vec<StyledSpan> {
 
 fn link_target(link: &LinkRef) -> String {
     match link {
-        // Paths, onion addresses, and slugs have restricted char classes; URLs
-        // are carried verbatim too now that there is no marker syntax to forge.
+        // Same-site paths and onion addresses carry no `http(s)://` scheme, so
+        // terminals do not auto-linkify them; they are shown verbatim.
         LinkRef::SameSite { path } => path.as_str().to_owned(),
         LinkRef::Entangled { address, path, .. } => {
             format!("{}{}", address.as_str(), path.as_str())
         }
-        LinkRef::Carrier { url, .. } => url.clone(),
-        LinkRef::Citation { url } => url.clone(),
+        // Carrier and citation targets are real `http(s)://` URLs. Section 03
+        // forbids the client from navigating to them automatically; a terminal
+        // that auto-linkifies the URL turns it into a one-click navigation,
+        // defeating that. Defang the scheme (`https://` -> `hxxps://`) so the
+        // emulator no longer treats it as a clickable link, while the user can
+        // still read and copy it. This is a presentation choice of the text
+        // viewer, not a change to the document or the engine IR.
+        LinkRef::Carrier { url, .. } => defang_url(url),
+        LinkRef::Citation { url } => defang_url(url),
+    }
+}
+
+/// Defang a URL so terminals do not auto-linkify it: `https://` becomes
+/// `hxxps://` and `http://` becomes `hxxp://` (the security-tooling
+/// convention). Any other string is returned unchanged.
+fn defang_url(url: &str) -> String {
+    if let Some(rest) = url.strip_prefix("https://") {
+        format!("hxxps://{rest}")
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        format!("hxxp://{rest}")
+    } else {
+        url.to_owned()
     }
 }
 
